@@ -1,72 +1,78 @@
 #!/usr/bin/env python3
-"""Entry for make.fun competition
-u-daring-gecko-25-one-line-laugh-sprint-cda708b2.
+"""One-Line Laugh Sprint entry.
 
-Writes a single funny line (at most 200 Unicode code points) about
-everyday life to entry.txt in the output directory. Pure standard
-library, deterministic, no network.
+The competition asks for a single funny line about ordinary life, at
+most 200 characters, and this program is the whole entry: it carries
+the line, checks it against the rules, and drops it into entry.txt
+for the judge to read. Nothing is fetched, nothing is random, and the
+same input always produces the same file.
 
-Why this line: a dead houseplant is the most ordinary small failure
-there is, and the joke turns the empty pot into something every adult
-recognises — a performance review that never ends, delivered in total
-silence, by an object that cannot even speak. The escalation from one
-dead plant to "my entire adult life" is the punchline, and it lands in
-one breath with nothing left to explain.
+The line itself: a houseplant is the smallest possible responsibility
+and still too much for the narrator, so the dead plant's empty pot
+becomes a performance review — the driest, most corporate verdict
+imaginable, delivered by an object on a windowsill that cannot talk.
 """
 
 import hashlib
 import os
+from pathlib import Path
 
-TEXT = (
+LINE = (
     "My houseplant died in a week, and now the empty pot sits on the "
     "sill like a tiny, silent performance review of my entire adult life."
 )
+MAX_CHARS = 200
+OUTPUT_NAME = "entry.txt"
 
-FILENAME = "entry.txt"
+
+def check_line(line: str) -> int:
+    """Make sure the line obeys the competition's limits; return its length."""
+    chars = len(line)
+    if not 1 <= chars <= MAX_CHARS:
+        raise ValueError(f"line is {chars} characters, allowed 1-{MAX_CHARS}")
+    if line != line.strip():
+        raise ValueError("line starts or ends with blank space")
+    if "\n" in line or "\t" in line:
+        raise ValueError("line must be one plain line, no newline or tab")
+    if "  " in line:
+        raise ValueError("line contains a double space")
+    if not line.endswith("."):
+        raise ValueError("line must end with a full stop")
+    if line.count(".") != 1:
+        raise ValueError("line must be a single sentence")
+    return chars
 
 
-def write_entry(text: str, out_dir: str) -> tuple[str, str]:
-    """Write text to entry.txt under out_dir and verify the bytes.
+def publish(line: str, folder: str) -> tuple[Path, str]:
+    """Save the line as entry.txt inside folder and prove the bytes match."""
+    target = Path(folder) / OUTPUT_NAME
+    encoded = line.encode("utf-8")
+    encoded.decode("utf-8")
+    target.write_bytes(encoded)
+    back = target.read_bytes()
+    if back != encoded:
+        raise ValueError("entry.txt on disk differs from the line")
+    digest = hashlib.sha256(encoded).hexdigest()
+    if hashlib.sha256(back).hexdigest() != digest:
+        raise ValueError("entry.txt checksum does not match")
+    return target, digest
 
-    Returns (path, sha256 hex digest) of the file as written.
-    """
-    data = text.encode("utf-8")
-    data.decode("utf-8")  # reject anything that is not clean UTF-8
 
-    path = os.path.join(out_dir, FILENAME)
-    with open(path, "w", encoding="utf-8", newline="\n") as handle:
-        handle.write(text)
-
-    with open(path, "rb") as handle:
-        written = handle.read()
-    digest = hashlib.sha256(data).hexdigest()
-    assert written == data, "entry.txt bytes differ from the intended line"
-    assert hashlib.sha256(written).hexdigest() == digest, "sha256 mismatch"
-    return path, digest
+def pick_folder() -> str:
+    """Where entry.txt goes: the harness folder, or the current directory."""
+    folder = os.environ.get("MAKEFUN_OUTPUT_DIR") or "/output"
+    return folder if Path(folder).is_dir() else "."
 
 
 def main() -> None:
-    text = TEXT
-    count = len(text)
-    assert 1 <= count <= 200, f"line is {count} chars, limit is 200"
-    assert text.strip(), "line must not be blank"
-    # One line only: no newline, and a single sentence ending in a stop.
-    assert "\n" not in text, "entry must be a single line"
-    assert text == text.strip(), "line must not start or end with space"
-    assert "  " not in text, "line must not contain a double space"
-    assert text.endswith(".") and text.count(".") == 1, (
-        "entry must be one sentence ending in a full stop"
-    )
-
-    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR") or "/output"
-    if not os.path.isdir(out_dir):
-        out_dir = "."
-    path, digest = write_entry(text, out_dir)
-
-    print(f"chars: {count}")
+    chars = check_line(LINE)
+    words = len(LINE.split())
+    target, digest = publish(LINE, pick_folder())
+    print(f"characters: {chars} (limit {MAX_CHARS})")
+    print(f"words: {words}")
     print(f"sha256: {digest}")
-    print(f"wrote: {path}")
-    print("verified: entry.txt bytes match the line exactly")
+    print(f"wrote: {target}")
+    print("verified: entry.txt holds exactly the line above")
 
 
 if __name__ == "__main__":
